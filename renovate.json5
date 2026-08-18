@@ -1,25 +1,43 @@
+// renovate.json5 - Mender dependency update configuration for mender-demo-artifact
+// See Documentation/dependency-updates.md in mender-qa for the process.
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+
   "extends": [
     "config:recommended",
     ":gitSignOff",
     ":rebaseStalePrs"
   ],
-  "reviewers": ["team:qa-dependabot-reviewers"],
 
-  "packageRules": [
-    {
-      // TODO: remove some of these when we ditch dependabot
-      "matchCategories": ["python", "docker", "ci"],
-      "enabled": false
-    },
-    {
-      // TODO: remove  when we ditch dependabot
-      "matchManagers": ["git-submodules"],
-      "enabled": false
-    },
-  ],
+  // CODEOWNERS drives reviewer assignment - keep its dependency file entries current.
+  "reviewersFromCodeOwners": true,
 
+  // fix(deps): <desc>, per renovate.json5.sample in mender-qa.
+  "semanticCommits": "enabled",
+  "semanticCommitType": "fix",
+  "semanticCommitScope": "deps",
+
+  // Fallback window for weeks with no merges; the renovate CI job is the primary trigger.
+  "schedule": ["after 10pm on Monday", "before 6am on Tuesday"],
+
+  // Was prHourlyLimit 0 (unlimited) while Dependabot still owned most ecosystems.
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+
+  // master is the only maintained branch here.
+  "baseBranchPatterns": ["master"],
+
+  // Security PRs bypass the schedule and automerge when CI is green.
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "automerge": true,
+    "automergeType": "pr",
+    "labels": ["security"]
+  },
+
+  // MENDER_ARTIFACT_VERSION is a plain .gitlab-ci.yml variable in this repo,
+  // not a value: block and not a Dockerfile ARG.
   "customManagers": [
     {
       "customType": "regex",
@@ -31,8 +49,38 @@
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.*)$",
       "versioningTemplate": "semver"
-    },
+    }
   ],
 
-  "prHourlyLimit": 0
+  "packageRules": [
+    // config:recommended pulls in :semanticPrefixFixDepsChoreOthers, which forces
+    // semanticCommitType back to "chore" for any dep whose manager does not tag it
+    // with an npm/pip style depType. Must stay BEFORE the gitlabci rule: rules apply
+    // in order and the last match wins, so gitlabci keeps its own type.
+    {
+      "matchPackageNames": ["*"],
+      "semanticCommitType": "fix"
+    },
+
+    // CI image bumps get ci: instead of fix(deps):
+    {
+      "matchManagers": ["gitlabci", "gitlabci-include"],
+      "semanticCommitType": "ci",
+      "semanticCommitScope": ""
+    },
+
+    // Python: one PR for tests/requirements.
+    {
+      "matchManagers": ["pip_requirements"],
+      "groupName": "python-dependencies",
+      "groupSlug": "python-dependencies"
+    },
+
+    // Renovate disables the git-submodules manager by default, but Dependabot was
+    // updating tests/mender_test_containers monthly, so enable it to keep that going.
+    {
+      "matchManagers": ["git-submodules"],
+      "enabled": true
+    }
+  ]
 }
